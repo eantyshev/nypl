@@ -19,6 +19,7 @@ def parse_cmdline():
     parser.add_argument("--query", help="String to query")
     parser.add_argument("--field", help="MODS field to query")
     parser.add_argument("--uuid", help="Collection/item/capture UUID")
+    parser.add_argument("--page", help="Page number")
     args = parser.parse_args()
 
     if args.method == 'search':
@@ -32,12 +33,15 @@ def parse_cmdline():
     return args
 
 
-def api_request(args, headers):
+def api_request(args):
+    headers = _get_headers(args)
     resp = None
     if args.method == 'search':
         params = {'q': args.query}
         if args.field:
             params.update({'field': args.field})
+        if args.page:
+            params.update({'page': args.page})
         resp = requests.get(BASE_API_URL + "/items/search",
                             params=params, headers=headers)
     elif args.method in ['mods', 'items', 'collections']:
@@ -56,12 +60,14 @@ def api_request(args, headers):
         raise
 
 
-def main():
-    args = parse_cmdline()
+def _get_headers(args):
     with open(args.auth_token, 'r') as f:
         token = f.read().strip()
-    headers = {'Authorization': "Token token=%s" % token}
-    data = api_request(args, headers)
+    return {'Authorization': "Token token=%s" % token}
+
+def main():
+    args = parse_cmdline()
+    data = api_request(args)
     pprint(data)
 
 if __name__ == '__main__':
