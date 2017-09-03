@@ -1,14 +1,28 @@
 #!/usr/bin/python
 
-import os
+import argparse
+import os, sys
 import logging
 import shutil
+import zipfile
 from six.moves import urllib
 
 from nypl import api_request
 
 logging.basicConfig(level=logging.DEBUG)
 LOG = logging.getLogger(__name__)
+
+
+def parse_cmdline():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--action", help="Action to perform with given collection",
+                        choices=['download', 'archive', 'all'],
+                        default='all')
+    parser.add_argument("--auth-token", help="Auth token file", required=True)
+    parser.add_argument("--title", help="Collection title", required=True)
+    args = parser.parse_args()
+
+    return args
 
 class NYPLArgs(object):
     def __init__(self, method, auth_token='api_token.dat', query=None, field=None,
@@ -73,7 +87,11 @@ def download_uuid(uuid, path="."):
         LOG.info("%s is downloaded, skip...", filename)
         return
     LOG.info("Downloading %(highResLink)s to %(filename)s..." % locals())
-    req = urllib.request.urlopen(highResLink)
+    try:
+        req = urllib.request.urlopen(highResLink)
+    except Exception as e:
+        LOG.error(e)
+        return
     LOG.debug(req)
     with open(filename, 'wb') as f:
         while True:
@@ -82,12 +100,34 @@ def download_uuid(uuid, path="."):
                 break
             f.write(chunk)
 
+def zip_archive(path):
+    zip_name = path + ".zip"
+    LOG.debug("Create zip archive %s", zip_name)
+    with zipfile.ZipFile(zip_name, 'a', allowZip64=True) as z:
+        nlist = z.namelist()
+        for fn in os.listdir(path):
+            if fn not in nlist:
+                LOG.debug("Adding to archive %s", fn)
+                z.write(os.path.join(path, fn), fn)
+            else:
+                LOG.debug("%s already archived", fn)
+
 #from pprint import pprint
 #LOG.debug(pprint(data))
-collection_search = 'Italy, 1895-1900'
-if not os.path.isdir(collection_search):
-    os.mkdir(collection_search)
 
-args = NYPLArgs('search', query=collection_search, field='title')
-for uuid in get_uuids(args):
-    download_uuid(uuid, path=collection_search)
+    
+def main():
+    args = parse_cmdline()
+    collection_search = args.title 
+    if args.action in ['download', 'all']:
+        if not os.path.isdir(collection_search):
+            os.mkdir(collection_search)
+        
+        nypl_args = NYPLArgs('search', query=collection_search, field='title')
+        for uuid in get_uuids(nypl_args):
+            download_uuid(uuid, path=collection_search)
+    if args.action in ['archive', 'all']:
+        zip_archive(collection_search)
+
+if __name__ == '__main__':
+    main()
